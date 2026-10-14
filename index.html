@@ -43,23 +43,31 @@ function parseCSV(t){t=t.replace(/^\uFEFF/,'');const first=t.split(/\r?\n/)[0];c
  if(f!==''||row.length){row.push(f);out.push(row)}return out}
 function num(s){s=String(s||'').replace(/[^\d,.\-]/g,'');if(!s)return 0;const c=s.lastIndexOf(','),p=s.lastIndexOf('.');
  if(c>p)s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'');return parseFloat(s)||0}
-const MES={jan:1,ene:1,feb:2,mar:3,apr:4,abr:4,may:5,jun:6,jul:7,aug:8,ago:8,sep:9,set:9,oct:10,nov:11,dec:12,dic:12};
-function fecha(s){s=String(s||'').trim();let m;
+const MES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12,jan:1,ene:1,feb:2,mar:3,apr:4,abr:4,may:5,jun:6,jul:7,aug:8,ago:8,sep:9,set:9,oct:10,nov:11,dec:12,dic:12};
+function fecha(s){s=norm(s).replace(/ de /g,' ').replace(/^(\d{4}) (\d{1,2}) (\d{1,2})/,'$1-$2-$3');let m;const mk=w=>MES[w]||MES[w.slice(0,3)];
+ if((m=s.match(/^(\d{1,2}) ([a-z]+) (\d{4})/))&&mk(m[2]))return[+m[3],mk(m[2]),+m[1]];
+ if((m=s.match(/^([a-z]+) (\d{1,2}) (\d{4})/))&&mk(m[1]))return[+m[3],mk(m[1]),+m[2]];
+ if(m=s.match(/^(\d{1,2}) (\d{1,2}) (\d{2,4})/)){let a=+m[1],b=+m[2],y=+m[3];if(y<100)y+=2000;return b>12?[y,a,b]:[y,b,a]}
+ s=s.replace(/ /g,'-');
  if(m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))return[+m[1],+m[2],+m[3]];
  if(m=s.match(/^([A-Za-z]{3})[a-z]*\.? (\d{1,2}),? (\d{4})/))return[+m[3],MES[m[1].toLowerCase()],+m[2]];
  if(m=s.match(/^(\d{1,2}) ([A-Za-z]{3})[a-z]*\.?,? (\d{4})/))return[+m[3],MES[m[2].toLowerCase()],+m[1]];
  if(m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/)){let a=+m[1],b=+m[2],y=+m[3];if(y<100)y+=2000;return b>12?[y,a,b]:[y,b,a]}
  const d=new Date(s);return isNaN(d)?null:[d.getFullYear(),d.getMonth()+1,d.getDate()]}
-function col(h,names){for(const n of names){const i=h.findIndex(x=>x.trim().toLowerCase()===n);if(i>=0)return i}for(const n of names){const i=h.findIndex(x=>x.trim().toLowerCase().includes(n));if(i>=0)return i}return -1}
-function cargar(t){const a=parseCSV(t);const h=a[0];const C={ref:col(h,['booking reference','booking ref','referencia']),fv:col(h,['travel date','fecha de viaje']),
- net:col(h,['net price','net payout','neto']),gross:col(h,['retail price','gross price','total price','precio bruto']),com:col(h,['commission','comisión']),
- cur:col(h,['currency','moneda']),st:col(h,['status','estado']),pax:col(h,['number of passengers','pax','passengers']),pc:col(h,['product code','código']),pn:col(h,['product name','producto']),
- nombre:col(h,['lead traveler name','lead traveller name','nombre'])};
+const norm=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+function col(h,names){const H=h.map(norm);names=names.map(norm);for(const n of names){const i=H.indexOf(n);if(i>=0)return i}for(const n of names){const i=H.findIndex(x=>x.includes(n));if(i>=0)return i}return -1}
+const ESTADO={confirmed:'Confirmada',cancelled:'Cancelada',canceled:'Cancelada',rejected:'Rechazada',amended:'Modificada',pending:'Pendiente','on hold':'En espera'};
+const estadoES=s=>ESTADO[norm(s)]||s;
+function cargar(t){const a=parseCSV(t);const h=a[0];const C={ref:col(h,['booking reference','referencia de la reserva','referencia de reserva','booking ref','referencia']),fv:col(h,['travel date','fecha del viaje','fecha de viaje','fecha de la actividad']),
+ net:col(h,['net price','precio neto','net payout','importe neto','neto']),gross:col(h,['retail price','precio de venta','gross price','total price','precio bruto','precio minorista']),com:col(h,['commission','comision']),
+ cur:col(h,['currency','moneda','divisa']),st:col(h,['status','estado']),pax:col(h,['number of passengers','numero de pasajeros','numero de viajeros','n de pasajeros','pasajeros','viajeros','pax','passengers']),
+ pc:col(h,['product code','codigo del producto','codigo de producto']),pn:col(h,['product name','nombre del producto','nombre de producto']),
+ nombre:col(h,['lead traveler name','lead traveller name','nombre del viajero principal','viajero principal','nombre del pasajero principal'])};
  if(C.fv<0||C.net<0&&C.gross<0){alert('No encuentro las columnas "Travel Date" y "Net Price" en el CSV.');return}
  const g=(r,i)=>i>=0?(r[i]||'').trim():'';
  rows=a.slice(1).filter(r=>r.length>2).map(r=>{const f=fecha(g(r,C.fv));const st=g(r,C.st);const net=num(g(r,C.net));const gross=C.gross>=0?num(g(r,C.gross)):null;
   const com=C.com>=0?num(g(r,C.com)):(gross!=null?gross-net:null);
-  return{ref:g(r,C.ref),f,st,anulada:/cancel|reject|anulad|rechaz/i.test(st),net,gross,com,cur:g(r,C.cur)||'EUR',pax:parseInt(g(r,C.pax))||0,pc:g(r,C.pc),pn:g(r,C.pn),cli:g(r,C.nombre)}}).filter(r=>r.f);
+  return{ref:g(r,C.ref),f,st:estadoES(st),anulada:/cancel|reject|anulad|rechaz/i.test(norm(st)),net,gross,com,cur:g(r,C.cur)||'EUR',pax:parseInt(g(r,C.pax))||0,pc:g(r,C.pc),pn:g(r,C.pn),cli:g(r,C.nombre)}}).filter(r=>r.f);
  window.hasGross=C.gross>=0;const ys=[...new Set(rows.map(r=>r.f[0]))].sort();$('anio').innerHTML=ys.map(y=>`<option>${y}</option>`).join('');
  const last=rows.reduce((m,r)=>r.f[0]*100+r.f[1]>m?r.f[0]*100+r.f[1]:m,0);$('anio').value=Math.floor(last/100);
  const qs=new Set(rows.filter(r=>r.f[0]==Math.floor(last/100)).map(r=>Math.ceil(r.f[1]/3)));$('trim').value=qs.size==1?[...qs][0]:0;render()}
@@ -93,6 +101,8 @@ function render(){if(!rows.length)return;const pc=num($('comi').value)/100;
  [...new Set(sel.map(r=>r.pc||r.pn))].forEach(p=>{const l=sel.filter(r=>(r.pc||r.pn)==p),s=sumar(l);const nm=(l.find(r=>/^[\x00-\x7F]*$/.test(r.pn))||l[0]).pn;
   h+=`<tr><td>${esc(p)}</td><td>${esc(nm)}</td><td class="n">${s.n}</td><td class="n">${s.pax}</td><td class="n">${s.canc}</td><td class="n">${eur(s.net)}</td><td class="n">${eur(s.gross)}</td><td class="n">${eur(s.com)}</td></tr>`;resumen.push([p,nm,s.n,s.pax,s.canc,s.net.toFixed(2),s.gross.toFixed(2),s.com.toFixed(2)])});
  h+='</table>';if(ivaOn)resumen.push([],['Estimación base imponible (IVA '+iva+'%)',(T.net/(1+iva/100)).toFixed(2)],['Estimación IVA incluido',(T.net-T.net/(1+iva/100)).toFixed(2)]);
+ resumen.push([],['Detalle de reservas'],['Fecha del viaje','Referencia','Cliente','Producto','Estado','Pax','Neto recibido','Bruto','Comisión','Moneda']);
+ sel.forEach(r=>resumen.push([`${String(r.f[2]).padStart(2,'0')}/${String(r.f[1]).padStart(2,'0')}/${r.f[0]}`,r.ref,r.cli,r.pc||r.pn,r.st,r.pax,r.net.toFixed(2),(r.gross||0).toFixed(2),(r.com||0).toFixed(2),r.cur]));
  h+='<h2>Detalle de reservas</h2><table><tr><th>Fecha viaje</th><th>Referencia</th><th>Cliente</th><th>Estado</th><th>Pax</th><th>Neto</th>'+(G?'<th>Bruto</th><th>Comisión</th>':'')+'</tr>';
  let mm=0,acc=[];const flush=()=>{if(acc.length){const s=sumar(acc);h+=`<tr class="sub"><td colspan="4">Subtotal ${MESES[mm]}</td><td class="n">${s.pax}</td><td class="n">${eur(s.net)}</td>${G?`<td class="n">${eur(s.gross)}</td><td class="n">${eur(s.com)}</td>`:''}</tr>`}acc=[]};
  sel.forEach(r=>{if(r.f[1]!=mm){flush();mm=r.f[1]}acc.push(r);const d=`${String(r.f[2]).padStart(2,'0')}/${String(r.f[1]).padStart(2,'0')}/${r.f[0]}`;
