@@ -1,0 +1,108 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Resumen trimestral de ventas Viator</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;max-width:1100px;margin:auto;padding:16px;color:#222}
+h1{font-size:22px}h2{font-size:17px;margin-top:24px;border-bottom:2px solid #0a7;padding-bottom:3px}
+.box{border:1px solid #ccc;border-radius:8px;padding:12px;margin:10px 0;background:#fafafa}
+#drop{border:2px dashed #0a7;padding:28px;text-align:center;border-radius:8px;cursor:pointer}#drop.over{background:#e6fff5}
+label{margin-right:12px;display:inline-block;margin-bottom:6px}input,select{padding:4px}
+table{border-collapse:collapse;width:100%;font-size:12px;margin:6px 0}th,td{border:1px solid #ccc;padding:3px 5px}th{background:#eee}
+td.n{text-align:right;white-space:nowrap}tr.sub td{background:#f1f8f5;font-weight:bold}tr.cx td{color:#999}
+button{background:#0a7;color:#fff;border:0;padding:8px 14px;border-radius:6px;cursor:pointer;margin-right:6px}
+.tot td{font-size:14px}.note{font-size:12px;color:#555}
+@media print{.noprint{display:none!important}body{max-width:none;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}
+</style></head><body>
+<h1>Resumen trimestral de ventas Viator</h1>
+<p class="noprint note">Todo se procesa en tu navegador: el archivo CSV no se envía a ningún servidor.</p>
+<details class="box noprint"><summary><b>Instrucciones: cómo descargar el CSV de Viator</b></summary><ol>
+<li>Entra en <b>Viator Management Center</b> (supplier.viator.com) con tu usuario de proveedor.</li>
+<li>Ve al menú <b>Performance</b> (Rendimiento) y abre el informe de reservas (<i>Bookings</i> / <i>Reports</i>; el nombre exacto puede variar).</li>
+<li>En el filtro de tipo de fecha elige <b>Travel date</b> (fecha de viaje), no la fecha de reserva.</li>
+<li>Indica el <b>rango de fechas</b> (date range) del trimestre: T1 01/01–31/03, T2 01/04–30/06, T3 01/07–30/09, T4 01/10–31/12.</li>
+<li>Pulsa <b>Export / Download CSV</b> y guarda el archivo.</li>
+<li>Arrastra ese archivo aquí abajo. Revisa el año y trimestre, rellena tus datos y pulsa <b>Descargar PDF</b> o <b>Descargar Excel/CSV</b> para enviárselo a tu gestor.</li></ol>
+<p class="note">Los menús de Viator pueden cambiar; si no los encuentras, busca el informe de reservas dentro de Performance.</p></details>
+<div class="box noprint">
+<label>Nombre / empresa <input id="nombre" size="30"></label>
+<label>NIF <input id="nif" size="12"></label>
+<label>Dirección / notas <input id="dir" size="30"></label>
+<div id="drop">Arrastra aquí el CSV de Viator o <u>haz clic para seleccionarlo</u><input type="file" id="file" accept=".csv,text/csv" hidden></div>
+<p><label>Año <select id="anio"></select></label><label>Trimestre <select id="trim"><option value="0">Todos</option><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+<label>Comisión Viator (%) <input id="comi" size="3"></label> <label><input type="checkbox" id="ivaOn"> Mostrar estimación IVA incluido, tipo % <input id="iva" value="21" size="3"></label></p>
+<button onclick="window.print()">Descargar PDF</button><button onclick="descargarCSV()">Descargar Excel/CSV</button>
+</div>
+<div id="out"></div>
+<script>
+const $=id=>document.getElementById(id);
+$('comi').value=localStorage.getItem('vt_comi')||'25';$('comi').addEventListener('input',()=>localStorage.setItem('vt_comi',$('comi').value));
+['nombre','nif','dir'].forEach(k=>{$(k).value=localStorage.getItem('vt_'+k)||'';$(k).oninput=()=>{localStorage.setItem('vt_'+k,$(k).value);render()}});
+let rows=[],fileName='';
+function parseCSV(t){t=t.replace(/^\uFEFF/,'');const first=t.split(/\r?\n/)[0];const d=(first.split(';').length>first.split(',').length)?';':(first.includes('\t')&&!first.includes(',')?'\t':',');
+ const out=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}
+ else if(c=='"')q=true;else if(c==d){row.push(f);f=''}else if(c=='\n'||c=='\r'){if(c=='\r'&&t[i+1]=='\n')i++;row.push(f);f='';if(row.length>1||row[0]!=='')out.push(row);row=[]}else f+=c}
+ if(f!==''||row.length){row.push(f);out.push(row)}return out}
+function num(s){s=String(s||'').replace(/[^\d,.\-]/g,'');if(!s)return 0;const c=s.lastIndexOf(','),p=s.lastIndexOf('.');
+ if(c>p)s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'');return parseFloat(s)||0}
+const MES={jan:1,ene:1,feb:2,mar:3,apr:4,abr:4,may:5,jun:6,jul:7,aug:8,ago:8,sep:9,set:9,oct:10,nov:11,dec:12,dic:12};
+function fecha(s){s=String(s||'').trim();let m;
+ if(m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))return[+m[1],+m[2],+m[3]];
+ if(m=s.match(/^([A-Za-z]{3})[a-z]*\.? (\d{1,2}),? (\d{4})/))return[+m[3],MES[m[1].toLowerCase()],+m[2]];
+ if(m=s.match(/^(\d{1,2}) ([A-Za-z]{3})[a-z]*\.?,? (\d{4})/))return[+m[3],MES[m[2].toLowerCase()],+m[1]];
+ if(m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/)){let a=+m[1],b=+m[2],y=+m[3];if(y<100)y+=2000;return b>12?[y,a,b]:[y,b,a]}
+ const d=new Date(s);return isNaN(d)?null:[d.getFullYear(),d.getMonth()+1,d.getDate()]}
+function col(h,names){for(const n of names){const i=h.findIndex(x=>x.trim().toLowerCase()===n);if(i>=0)return i}for(const n of names){const i=h.findIndex(x=>x.trim().toLowerCase().includes(n));if(i>=0)return i}return -1}
+function cargar(t){const a=parseCSV(t);const h=a[0];const C={ref:col(h,['booking reference','booking ref','referencia']),fv:col(h,['travel date','fecha de viaje']),
+ net:col(h,['net price','net payout','neto']),gross:col(h,['retail price','gross price','total price','precio bruto']),com:col(h,['commission','comisión']),
+ cur:col(h,['currency','moneda']),st:col(h,['status','estado']),pax:col(h,['number of passengers','pax','passengers']),pc:col(h,['product code','código']),pn:col(h,['product name','producto']),
+ nombre:col(h,['lead traveler name','lead traveller name','nombre'])};
+ if(C.fv<0||C.net<0&&C.gross<0){alert('No encuentro las columnas "Travel Date" y "Net Price" en el CSV.');return}
+ const g=(r,i)=>i>=0?(r[i]||'').trim():'';
+ rows=a.slice(1).filter(r=>r.length>2).map(r=>{const f=fecha(g(r,C.fv));const st=g(r,C.st);const net=num(g(r,C.net));const gross=C.gross>=0?num(g(r,C.gross)):null;
+  const com=C.com>=0?num(g(r,C.com)):(gross!=null?gross-net:null);
+  return{ref:g(r,C.ref),f,st,anulada:/cancel|reject|anulad|rechaz/i.test(st),net,gross,com,cur:g(r,C.cur)||'EUR',pax:parseInt(g(r,C.pax))||0,pc:g(r,C.pc),pn:g(r,C.pn),cli:g(r,C.nombre)}}).filter(r=>r.f);
+ window.hasGross=C.gross>=0;const ys=[...new Set(rows.map(r=>r.f[0]))].sort();$('anio').innerHTML=ys.map(y=>`<option>${y}</option>`).join('');
+ const last=rows.reduce((m,r)=>r.f[0]*100+r.f[1]>m?r.f[0]*100+r.f[1]:m,0);$('anio').value=Math.floor(last/100);
+ const qs=new Set(rows.filter(r=>r.f[0]==Math.floor(last/100)).map(r=>Math.ceil(r.f[1]/3)));$('trim').value=qs.size==1?[...qs][0]:0;render()}
+const eur=v=>v==null?'—':v.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:'always'})+' €';
+const MESES=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function seleccion(){const y=+$('anio').value,q=+$('trim').value;return rows.filter(r=>r.f[0]==y&&(!q||Math.ceil(r.f[1]/3)==q)).sort((a,b)=>(a.f[1]*100+a.f[2])-(b.f[1]*100+b.f[2]))}
+function sumar(l){const s={n:0,pax:0,net:0,gross:0,com:0,canc:0,cancNet:0};l.forEach(r=>{s.net+=r.net;s.gross+=r.gross||0;s.com+=r.com||0;if(r.anulada){s.canc++;s.cancNet+=r.net}else{s.n++;s.pax+=r.pax}});return s}
+let resumen=[];
+function render(){if(!rows.length)return;const pc=num($('comi').value)/100;
+ if(!window.hasGross)rows.forEach(r=>{r.gross=pc<1?r.net/(1-pc):r.net;r.com=r.gross-r.net});
+ const y=$('anio').value,q=+$('trim').value,sel=seleccion(),T=sumar(sel),G=true,calc=!window.hasGross,lab=calc?` (calculado con comisión ${num($('comi').value)}%)`:'';
+ const per=q?`T${q} ${y} (${['','01/01–31/03','01/04–30/06','01/07–30/09','01/10–31/12'][q]}/${y})`:`Año ${y}`;
+ const ivaOn=$('ivaOn').checked,iva=num($('iva').value);
+ let h=`<h2>${esc($('nombre').value||'(Nombre / empresa)')} — NIF ${esc($('nif').value||'—')}</h2><p>${esc($('dir').value)}</p>
+ <p><b>Periodo:</b> ${per} · por fecha de viaje · Fuente: ${esc(fileName)} · Generado el ${new Date().toLocaleDateString('es-ES')}</p>
+ <table class="tot"><tr><th>Concepto</th><th>Importe / nº</th></tr>
+ ${G?`<tr><td>Bruto cliente (precio venta)${lab}</td><td class="n">${eur(T.gross)}</td></tr><tr><td>Comisión Viator${lab}</td><td class="n">${eur(T.com)}</td></tr>`:''}
+ <tr><td><b>Neto recibido de Viator</b> (incl. gastos de cancelación retenidos)</td><td class="n"><b>${eur(T.net)}</b></td></tr>
+ <tr><td>Reservas realizadas (confirmadas/modificadas)</td><td class="n">${T.n}</td></tr><tr><td>Pasajeros (pax)</td><td class="n">${T.pax}</td></tr>
+ <tr><td>Cancelaciones / rechazadas</td><td class="n">${T.canc}${T.cancNet?' (con '+eur(T.cancNet)+' neto retenido)':''}</td></tr>
+ ${ivaOn?`<tr><td>Estimación: base imponible (neto / ${1+iva/100})</td><td class="n">${eur(T.net/(1+iva/100))}</td></tr><tr><td>Estimación: IVA ${iva}% incluido</td><td class="n">${eur(T.net-T.net/(1+iva/100))}</td></tr>`:''}
+ </table>${ivaOn?'<p class="note">Estimación orientativa suponiendo que el neto incluye IVA al tipo indicado. No es asesoramiento fiscal: confírmalo con tu gestor.</p>':''}
+ <p class="note">${calc?'El CSV de Viator solo incluye el neto que paga Viator. Bruto cliente = Neto / (1 − comisión%) y Comisión = Bruto − Neto, calculados con el porcentaje introducido ('+num($('comi').value)+'%). ':''}Monedas: ${[...new Set(sel.map(r=>r.cur))].join(', ')}.</p>`;
+ resumen=[['Resumen trimestral de ventas Viator'],['Nombre/empresa',$('nombre').value],['NIF',$('nif').value],['Periodo',per],...(calc?[['Bruto y comisión calculados con comisión Viator (%)',num($('comi').value)]]:[]),[],['Mes','Reservas','Pax','Cancelaciones','Neto recibido'].concat(G?['Bruto','Comisión']:[])];
+ h+='<h2>Por mes</h2><table><tr><th>Mes</th><th>Reservas</th><th>Pax</th><th>Cancel.</th><th>Neto</th>'+(G?'<th>Bruto</th><th>Comisión</th>':'')+'</tr>';
+ [...new Set(sel.map(r=>r.f[1]))].forEach(m=>{const s=sumar(sel.filter(r=>r.f[1]==m));h+=`<tr><td>${MESES[m]}</td><td class="n">${s.n}</td><td class="n">${s.pax}</td><td class="n">${s.canc}</td><td class="n">${eur(s.net)}</td>${G?`<td class="n">${eur(s.gross)}</td><td class="n">${eur(s.com)}</td>`:''}</tr>`;resumen.push([MESES[m],s.n,s.pax,s.canc,s.net.toFixed(2)].concat(G?[s.gross.toFixed(2),s.com.toFixed(2)]:[]))});
+ h+=`<tr class="sub"><td>Total</td><td class="n">${T.n}</td><td class="n">${T.pax}</td><td class="n">${T.canc}</td><td class="n">${eur(T.net)}</td>${G?`<td class="n">${eur(T.gross)}</td><td class="n">${eur(T.com)}</td>`:''}</tr></table>`;
+ resumen.push(['Total',T.n,T.pax,T.canc,T.net.toFixed(2)].concat(G?[T.gross.toFixed(2),T.com.toFixed(2)]:[]),[],['Producto (código)','Nombre','Reservas','Pax','Cancelaciones','Neto recibido','Bruto','Comisión']);
+ h+='<h2>Por producto</h2><table><tr><th>Código</th><th>Producto</th><th>Reservas</th><th>Pax</th><th>Cancel.</th><th>Neto</th><th>Bruto</th><th>Comisión</th></tr>';
+ [...new Set(sel.map(r=>r.pc||r.pn))].forEach(p=>{const l=sel.filter(r=>(r.pc||r.pn)==p),s=sumar(l);const nm=(l.find(r=>/^[\x00-\x7F]*$/.test(r.pn))||l[0]).pn;
+  h+=`<tr><td>${esc(p)}</td><td>${esc(nm)}</td><td class="n">${s.n}</td><td class="n">${s.pax}</td><td class="n">${s.canc}</td><td class="n">${eur(s.net)}</td><td class="n">${eur(s.gross)}</td><td class="n">${eur(s.com)}</td></tr>`;resumen.push([p,nm,s.n,s.pax,s.canc,s.net.toFixed(2),s.gross.toFixed(2),s.com.toFixed(2)])});
+ h+='</table>';if(ivaOn)resumen.push([],['Estimación base imponible (IVA '+iva+'%)',(T.net/(1+iva/100)).toFixed(2)],['Estimación IVA incluido',(T.net-T.net/(1+iva/100)).toFixed(2)]);
+ h+='<h2>Detalle de reservas</h2><table><tr><th>Fecha viaje</th><th>Referencia</th><th>Cliente</th><th>Estado</th><th>Pax</th><th>Neto</th>'+(G?'<th>Bruto</th><th>Comisión</th>':'')+'</tr>';
+ let mm=0,acc=[];const flush=()=>{if(acc.length){const s=sumar(acc);h+=`<tr class="sub"><td colspan="4">Subtotal ${MESES[mm]}</td><td class="n">${s.pax}</td><td class="n">${eur(s.net)}</td>${G?`<td class="n">${eur(s.gross)}</td><td class="n">${eur(s.com)}</td>`:''}</tr>`}acc=[]};
+ sel.forEach(r=>{if(r.f[1]!=mm){flush();mm=r.f[1]}acc.push(r);const d=`${String(r.f[2]).padStart(2,'0')}/${String(r.f[1]).padStart(2,'0')}/${r.f[0]}`;
+  h+=`<tr class="${r.anulada?'cx':''}"><td>${d}</td><td>${esc(r.ref)}</td><td>${esc(r.cli)}</td><td>${esc(r.st)}</td><td class="n">${r.pax}</td><td class="n">${eur(r.net)}</td>${G?`<td class="n">${eur(r.gross)}</td><td class="n">${eur(r.com)}</td>`:''}</tr>`});flush();
+ $('out').innerHTML=h+'</table>'}
+function descargarCSV(){if(!resumen.length)return alert('Primero carga un CSV.');const t='\uFEFF'+resumen.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""').replace(/^(-?\d+)\.(\d+)$/,'$1,$2')+'"').join(';')).join('\r\n');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download=`resumen_viator_${$('anio').value}_T${$('trim').value}.csv`;a.click()}
+const leer=f=>{fileName=f.name;f.text().then(cargar)};
+$('drop').onclick=()=>$('file').click();$('file').onchange=e=>e.target.files[0]&&leer(e.target.files[0]);
+$('drop').ondragover=e=>{e.preventDefault();$('drop').classList.add('over')};$('drop').ondragleave=()=>$('drop').classList.remove('over');
+$('drop').ondrop=e=>{e.preventDefault();$('drop').classList.remove('over');e.dataTransfer.files[0]&&leer(e.dataTransfer.files[0])};
+['anio','trim','ivaOn','iva','comi'].forEach(k=>$(k).oninput=render);
+</script></body></html>
